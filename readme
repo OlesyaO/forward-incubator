@@ -1,0 +1,98 @@
+--1
+create or replace PROCEDURE saveSigners (pV_FIO IN VARCHAR2 ,
+pID_MANAGER in number,
+pACTION in number) IS
+s number;
+BEGIN
+
+SELECT COUNT(*) INTO s FROM ci_users
+WHERE id_user = pID_MANAGER;
+
+IF s=0 THEN
+raise_application_error(-20020, "Пользователь не найден");
+END IF;
+
+CASE pACTION
+WHEN 1 THEN 
+IF EXISTS( SELECT * FROM scd_signers
+WHERE id_manager=pID_MANAGER) THEN 
+raise_application_error(-20020, "Пользователь не найден");
+ELSE 
+INSERT INTO scd_signers (V_FIO, 
+ID_MANAGER)
+VALUES (pV_FIO, pID_MANAGER);
+END IF;
+WHEN 2 THEN 
+UPDATE scd_signers 
+SET V_FIO=pV_FIO
+WHERE id_manager= pID_MANAGER;
+WHEN 3 THEN 
+DELETE FROM scd_signers 
+WHERE id_manager=pID_MANAGER;
+END CASE;
+END;
+
+
+--2
+CREATE OR REPLACE FUNCTION getDecoder(id_equip_kits_inst IN NUMBER) RETURN NUMBER
+IS OUTT NUMBER;
+BEGIN 
+
+SELECT C.b_agency, E.v_cas_id, E.v_ext_ident, COUNT(*) 
+INTO O, U, R, W
+FROM scd_equip_kits E
+JOIN scd_contracts C
+ON E.id_contract_inst=C.id_contract_inst
+AND dt_start<=current_timestamp
+AND dt_stop>current_timestamp
+WHERE E.id_equip_kits_inst=id_equip_kits_inst;
+
+IF O=1 THEN 
+OUTT:=U;
+END IF;
+
+IF O=0 THEN 
+OUTT:=R;
+END IF;
+
+IF W=0 THEN 
+raise_application_error(-20020, "Оборудование не найдено");
+END IF;
+
+RETURN(OUTT);
+
+END getDecoder;
+
+
+--3
+create or replace PROCEDURE getEquip (pID_EQUIP_KITS_INST IN default null number,
+                                      sys_refcursor out cursor)
+ IS
+                               ci_users.V_DESCRIPTION varchar2,
+                               ci_users.V_USERNAME varchar2, 
+                               fw_contracts.ID_CONTRACT_INST number,
+                               scd_equipment_kits_type.v_name varchar2,
+                               getDecoder(pID_EQUIP_KITS_INST) number
+begin 
+ if pID_EQUIP_KITS_INST is null then 
+ OPEN sys_refcursor FOR select ci_users.V_DESCRIPTION,
+                               ci_users.V_USERNAME, 
+                               fw_contracts.ID_CONTRACT_INST
+                               scd_equipment_kits_type.v_name,
+                               getDecoder(pID_EQUIP_KITS_INST)
+                    from ci_users,
+                         fw_contract,
+                         scd_equipment_kits_type;   
+  
+  if pID_EQUIP_KITS_INST is not null then 
+ OPEN sys_refcursor FOR select ci_users.V_DESCRIPTION,
+                               ci_users.V_USERNAME, 
+                               fw_contracts.ID_CONTRACT_INST
+                               scd_equipment_kits_type.v_name,
+                               getDecoder(pID_EQUIP_KITS_INST)
+                    from ci_users,
+                         fw_contract,
+                         scd_equipment_kits_type,
+                         scd_equip_kits
+                    where scd_equip_kits.ID_EQUIP_KITS_INST=pID_EQUIP_KITS_INST;                        ;
+end;
